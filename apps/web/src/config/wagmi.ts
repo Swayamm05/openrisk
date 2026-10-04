@@ -7,6 +7,7 @@ import { injected } from 'wagmi/connectors'
 export const wagmiConfig = createConfig({
   chains: [mainnet],
   connectors: [injected()],
+  storage: null,
   transports: {
     [mainnet.id]: http(),
   },
