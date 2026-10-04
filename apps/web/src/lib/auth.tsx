@@ -1,11 +1,12 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useAccount, useDisconnect, useSignMessage } from 'wagmi'
-import { verifyMessage } from 'viem'
+import { api, setToken } from './api'
 
 type AuthState = {
-  address: `0x${string}` | undefined // set only after a verified signature
-  connectedAddress: `0x${string}` | undefined // connected, but not necessarily signed in
+  address: `0x${string}` | undefined // set only after the server verifies the signature
+  connectedAddress: `0x${string}` | undefined
   isSignedIn: boolean
+  isTrader: boolean // decided by the server, not by the browser
   busy: boolean
   error: string
   signIn: () => Promise<void>
@@ -14,23 +15,12 @@ type AuthState = {
 
 const AuthContext = createContext<AuthState | null>(null)
 
-function buildMessage(address: string, nonce: string, issuedAt: string): string {
-  return [
-    'Sign in to OpenRisk',
-    '',
-    `Wallet: ${address}`,
-    `Nonce: ${nonce}`,
-    `Issued at: ${issuedAt}`,
-    '',
-    'This signature proves you own this wallet. It costs no gas, sends no funds, and gives OpenRisk no access to your assets.',
-  ].join('\n')
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { address: connected } = useAccount()
   const { disconnect } = useDisconnect()
   const { signMessageAsync } = useSignMessage()
   const [signedAddress, setSignedAddress] = useState<`0x${string}` | undefined>()
+  const [trader, setTrader] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const attempted = useRef<string | undefined>(undefined)
@@ -40,14 +30,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setBusy(true)
     setError('')
     try {
-      const message = buildMessage(connected, crypto.randomUUID(), new Date().toISOString())
+      const { message } = await api.nonce(connected)
       const signature = await signMessageAsync({ message })
-      const ok = await verifyMessage({ address: connected, message, signature })
-      if (!ok) throw new Error('mismatch')
+      const result = await api.verify(connected, signature)
+      setToken(result.token)
+      setTrader(result.isTrader)
       setSignedAddress(connected)
     } catch (e) {
       const text = e instanceof Error ? e.message : ''
-      setError(/reject|denied|cancel/i.test(text) ? 'Signature was rejected.' : 'Could not sign in. Try again.')
+      if (/reject|denied|cancel/i.test(text)) setError('Signature was rejected.')
+      else if (/failed to fetch|networkerror/i.test(text)) {
+        setError('Could not reach the server. It may be waking up, so try again in a minute.')
+      } else setError(text || 'Could not sign in. Try again.')
     } finally {
       setBusy(false)
     }
@@ -55,6 +49,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   function signOut() {
     attempted.current = connected
+    setToken('')
+    setTrader(false)
     setSignedAddress(undefined)
     setError('')
     disconnect()
@@ -63,6 +59,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // If the wallet account changes or disconnects, the old sign-in no longer applies.
   useEffect(() => {
     if (signedAddress && signedAddress.toLowerCase() !== connected?.toLowerCase()) {
+      setToken('')
+      setTrader(false)
       setSignedAddress(undefined)
     }
   }, [connected, signedAddress])
@@ -83,6 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     address: signedAddress,
     connectedAddress: connected,
     isSignedIn: !!signedAddress,
+    isTrader: trader,
     busy,
     error,
     signIn,
