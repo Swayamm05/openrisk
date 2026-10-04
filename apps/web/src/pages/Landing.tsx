@@ -1,11 +1,11 @@
-import { useAccount } from 'wagmi'
+import { useAuth } from '../lib/auth'
 import { ConnectButton } from '../components/ConnectButton'
 import { Disclaimer } from '../components/Disclaimer'
 
 type Props = { onStart: () => void }
 
 export function Landing({ onStart }: Props) {
-  const { isConnected } = useAccount()
+  const { isSignedIn } = useAuth()
 
   return (
     <div className="space-y-10">
@@ -18,7 +18,7 @@ export function Landing({ onStart }: Props) {
           simulation that sizes every trade to your limit. No real money is ever deposited.
         </p>
         <div className="flex flex-wrap items-start gap-3">
-          {isConnected ? (
+          {isSignedIn ? (
             <button
               onClick={onStart}
               className="rounded-lg bg-emerald-500 px-5 py-2 font-semibold text-slate-950 hover:bg-emerald-400"
@@ -43,7 +43,7 @@ export function Landing({ onStart }: Props) {
           <p className="font-semibold">OpenRisk Founder Trader</p>
           <p className="text-sm text-slate-400">
             The first model trader. Publishes signals manually with entry, stop loss, and take profit.
-            Public statistics arrive in Phase 6.
+            Public statistics arrive in Phase 2.
           </p>
         </div>
       </section>
@@ -51,4 +51,4 @@ export function Landing({ onStart }: Props) {
       <Disclaimer />
     </div>
   )
-    }
+}
