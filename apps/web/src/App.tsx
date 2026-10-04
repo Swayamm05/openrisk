@@ -1,88 +1,94 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from './lib/auth'
+import { api } from './lib/api'
 import { Header, type Screen } from './components/Header'
 import { Landing } from './pages/Landing'
 import { CreateSimulation } from './pages/CreateSimulation'
 import { Dashboard } from './pages/Dashboard'
 import { Signals } from './pages/Signals'
 import { Trader } from './pages/Trader'
-import { isTrader } from './config/trader'
-import { syncSimulation } from './lib/engine'
-import { hashSignal } from './lib/hash'
-import {
-  addSignal,
-  closeSignal,
-  deleteSimulation,
-  loadSignals,
-  loadSimulation,
-  saveSimulation,
-} from './lib/storage'
 import type { Signal, SignalInput, Simulation } from './lib/types'
 
+function messageOf(e: unknown): string {
+  const text = e instanceof Error ? e.message : ''
+  if (/failed to fetch|networkerror/i.test(text)) {
+    return 'Could not reach the server. It may be waking up, so try again in a minute.'
+  }
+  return text || 'Something went wrong.'
+}
+
 export default function App() {
-  const { address } = useAuth() // set only after the wallet signature is verified
+  const { address, isSignedIn, isTrader: canTrade } = useAuth()
   const [screen, setScreen] = useState<Screen>('landing')
   const [sim, setSim] = useState<Simulation | null>(null)
-  const [signals, setSignals] = useState<Signal[]>(() => loadSignals())
-  const canTrade = isTrader(address)
+  const [signals, setSignals] = useState<Signal[]>([])
+  const [toast, setToast] = useState('')
 
-  // Reload signals, apply any new ones to this wallet's simulation, and save.
-  function refresh(addr: string | undefined) {
-    const all = loadSignals()
-    setSignals(all)
-    if (!addr) {
-      setSim(null)
-      return
+  // Load shared signals, and this user's simulation if signed in.
+  async function refresh() {
+    try {
+      const s = await api.signals()
+      setSignals(s.signals)
+      if (isSignedIn) {
+        const m = await api.mySimulation()
+        setSim(m.simulation)
+      } else {
+        setSim(null)
+      }
+    } catch (e) {
+      setToast(messageOf(e))
     }
-    const loaded = loadSimulation(addr)
-    if (!loaded) {
-      setSim(null)
-      return
-    }
-    const synced = syncSimulation(loaded, all)
-    saveSimulation(synced)
-    setSim(synced)
   }
 
   useEffect(() => {
-    refresh(address)
+    void refresh()
+    const id = setInterval(() => void refresh(), 30000)
+    return () => clearInterval(id)
   }, [address])
 
   function navigate(next: Screen) {
-    refresh(address)
+    void refresh()
     setScreen(next === 'dashboard' && !sim ? 'create' : next)
   }
 
-  function handleCreate(newSim: Simulation) {
-    saveSimulation(newSim)
-    setSim(newSim)
-    setScreen('dashboard')
+  // The server recomputes every number. Only capital and risk are sent.
+  async function handleCreate(newSim: Simulation) {
+    try {
+      await api.createSimulation(newSim.startingCapital, newSim.riskLimitPercent)
+      await refresh()
+      setScreen('dashboard')
+    } catch (e) {
+      setToast(messageOf(e))
+    }
   }
 
-  function handleReset() {
-    if (address) deleteSimulation(address)
-    setSim(null)
-    setScreen('create')
+  async function handleReset() {
+    try {
+      await api.deleteSimulation()
+      await refresh()
+      setScreen('create')
+    } catch (e) {
+      setToast(messageOf(e))
+    }
   }
 
   async function handlePublish(input: SignalInput) {
-    if (!canTrade) return
-    const publishedAt = new Date().toISOString()
-    const hash = await hashSignal({ ...input, publishedAt })
-    addSignal({
-      ...input,
-      id: crypto.randomUUID(),
-      publishedAt,
-      hash,
-      status: 'OPEN',
-    })
-    refresh(address)
+    try {
+      await api.publish(input)
+    } catch (e) {
+      setToast(messageOf(e))
+      throw e
+    }
+    await refresh()
   }
 
-  function handleClose(id: string, exitPrice: number) {
-    if (!canTrade) return
-    closeSignal(id, exitPrice, new Date().toISOString())
-    refresh(address)
+  async function handleClose(id: string, exitPrice: number) {
+    try {
+      await api.close(id, exitPrice)
+      await refresh()
+    } catch (e) {
+      setToast(messageOf(e))
+    }
   }
 
   return (
@@ -102,6 +108,16 @@ export default function App() {
           </p>
         )}
       </main>
+      {toast && (
+        <div className="fixed inset-x-4 bottom-4 z-50 mx-auto max-w-md rounded-lg border border-red-500/60 bg-slate-900 p-3 text-sm text-red-200 shadow-lg">
+          <div className="flex items-start justify-between gap-3">
+            <span>{toast}</span>
+            <button onClick={() => setToast('')} className="text-slate-400">
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
-    }
+            }
