@@ -5,9 +5,10 @@ export type Screen = 'landing' | 'create' | 'dashboard' | 'signals' | 'trader'
 type Props = {
   screen: Screen
   onNavigate: (s: Screen) => void
+  canTrade: boolean
 }
 
-export function Header({ screen, onNavigate }: Props) {
+export function Header({ screen, onNavigate, canTrade }: Props) {
   const link = (s: Screen, label: string) => (
     <button
       onClick={() => onNavigate(s)}
@@ -32,7 +33,7 @@ export function Header({ screen, onNavigate }: Props) {
         {link('create', 'New Simulation')}
         {link('dashboard', 'Dashboard')}
         {link('signals', 'Signals')}
-        {link('trader', 'Trader')}
+        {canTrade && link('trader', 'Trader')}
       </nav>
     </header>
   )
