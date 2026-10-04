@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useAccount } from 'wagmi'
+import { useAuth } from '../lib/auth'
 import { Disclaimer } from '../components/Disclaimer'
 import {
   MILESTONE_PERCENT,
@@ -19,7 +19,7 @@ const TRADER_NAME = 'OpenRisk Founder Trader'
 type Props = { onCreate: (sim: Simulation) => void }
 
 export function CreateSimulation({ onCreate }: Props) {
-  const { address, isConnected } = useAccount()
+  const { address, isSignedIn } = useAuth()
 
   const [capitalChoice, setCapitalChoice] = useState<number | 'custom'>(10)
   const [customCapital, setCustomCapital] = useState('')
@@ -170,12 +170,12 @@ export function CreateSimulation({ onCreate }: Props) {
 
       <button
         onClick={start}
-        disabled={!isConnected || !valid}
+        disabled={!isSignedIn || !valid}
         className="rounded-lg bg-emerald-500 px-6 py-3 font-semibold text-slate-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
       >
         Start Simulation
       </button>
-      {!isConnected && <p className="text-sm text-slate-400">Connect your wallet first.</p>}
+      {!isSignedIn && <p className="text-sm text-slate-400">Sign in with your wallet first.</p>}
     </div>
   )
-      }
+}
