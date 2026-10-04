@@ -1,0 +1,157 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String         @id @default(uuid())
+  walletAddress String         @unique
+  createdAt     DateTime       @default(now())
+  simulation    Simulation?
+  notifications Notification[]
+
+  @@map("users")
+}
+
+model Trader {
+  id            String        @id @default(uuid())
+  walletAddress String        @unique
+  displayName   String
+  description   String        @default("")
+  verified      Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+  signals       TradeSignal[]
+  simulations   Simulation[]
+
+  @@map("traders")
+}
+
+model Simulation {
+  id                      String   @id @default(uuid())
+  userId                  String   @unique
+  traderId                String
+  startingCapital         Float
+  currentEquity           Float
+  peakEquity              Float
+  riskLimitPercent        Float
+  maxLoss                 Float
+  drawdown                Float    @default(0)
+  dailyLossLimitPercent   Float
+  maxDrawdownLimitPercent Float
+  status                  String   @default("ACTIVE")
+  failReason              String?
+  milestonePercent        Float    @default(20)
+  milestoneEquity         Float
+  milestoneStatus         String   @default("NOT_REACHED")
+  billingStatus           String   @default("NOT_TRIGGERED")
+  createdAt               DateTime @default(now())
+
+  user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trader        Trader                @relation(fields: [traderId], references: [id])
+  trades        SimulationTrade[]
+  billingEvents BillingEvent[]
+  snapshots     PerformanceSnapshot[]
+
+  @@map("simulations")
+}
+
+model TradeSignal {
+  id               String    @id @default(uuid())
+  traderId         String
+  symbol           String
+  direction        String
+  entryPrice       Float
+  stopLoss         Float
+  takeProfit       Float
+  thesis           String    @default("")
+  maxLeverage      Float?
+  publishedAt      DateTime  @default(now())
+  blockchainTxHash String?
+  signalHash       String    @unique
+  status           String    @default("OPEN")
+  exitPrice        Float?
+  closedAt         DateTime?
+
+  trader        Trader            @relation(fields: [traderId], references: [id])
+  simTrades     SimulationTrade[]
+  notifications Notification[]
+
+  @@map("trade_signals")
+}
+
+model SimulationTrade {
+  id               String    @id @default(uuid())
+  simulationId     String
+  signalId         String
+  symbol           String
+  direction        String
+  simulatedEntry   Float
+  stopLoss         Float
+  takeProfit       Float
+  quantity         Float
+  notional         Float
+  riskAmount       Float
+  leverage         Float
+  cappedByLeverage Boolean   @default(false)
+  simulatedExit    Float?
+  pnl              Float?
+  status           String
+  skipReason       String?
+  openedAt         DateTime
+  closedAt         DateTime?
+
+  simulation Simulation  @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+  signal     TradeSignal @relation(fields: [signalId], references: [id])
+
+  @@unique([simulationId, signalId])
+  @@map("simulation_trades")
+}
+
+model BillingEvent {
+  id               String    @id @default(uuid())
+  simulationId     String
+  milestonePercent Float
+  milestoneEquity  Float
+  peakEquity       Float
+  feeAmount        Float?
+  currency         String    @default("USDC")
+  status           String    @default("PENDING")
+  triggeredAt      DateTime
+  paidAt           DateTime?
+  paymentTxHash    String?
+
+  simulation Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+
+  @@unique([simulationId, milestonePercent])
+  @@map("billing_events")
+}
+
+model Notification {
+  id            String    @id @default(uuid())
+  userId        String
+  tradeSignalId String
+  sentAt        DateTime  @default(now())
+  openedAt      DateTime?
+
+  user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  signal TradeSignal @relation(fields: [tradeSignalId], references: [id])
+
+  @@map("notifications")
+}
+
+model PerformanceSnapshot {
+  id           String   @id @default(uuid())
+  simulationId String
+  equity       Float
+  pnl          Float
+  drawdown     Float
+  timestamp    DateTime @default(now())
+
+  simulation Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+
+  @@map("performance_snapshots")
+}
