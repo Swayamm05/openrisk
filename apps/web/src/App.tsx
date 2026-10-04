@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useAccount } from 'wagmi'
+import { useAuth } from './lib/auth'
 import { Header, type Screen } from './components/Header'
 import { Landing } from './pages/Landing'
 import { CreateSimulation } from './pages/CreateSimulation'
@@ -20,7 +20,7 @@ import {
 import type { Signal, SignalInput, Simulation } from './lib/types'
 
 export default function App() {
-  const { address } = useAccount()
+  const { address } = useAuth() // set only after the wallet signature is verified
   const [screen, setScreen] = useState<Screen>('landing')
   const [sim, setSim] = useState<Simulation | null>(null)
   const [signals, setSignals] = useState<Signal[]>(() => loadSignals())
@@ -98,10 +98,10 @@ export default function App() {
         )}
         {screen === 'trader' && !canTrade && (
           <p className="rounded-lg border border-slate-700 p-4 text-sm text-slate-400">
-            The Trader page is locked. Connect the registered trader wallet to open it.
+            The Trader page is locked. Sign in with the registered trader wallet to open it.
           </p>
         )}
       </main>
     </div>
   )
-}
+    }
