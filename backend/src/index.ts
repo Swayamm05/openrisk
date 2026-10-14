@@ -10,6 +10,7 @@ import { signalStats, simulationParams, validateSignal } from './engine'
 import type { SignalInput } from './engine'
 import { closeSignalById, signalToEngine, syncAll, syncOne } from './sync'
 import { startPriceMonitor } from './monitor'
+import { verifyAnchor } from './anchor'
 
 const app = express()
 app.use(cors({ origin: config.corsOrigins.length ? config.corsOrigins : false }))
@@ -62,7 +63,7 @@ app.post(
   }),
 )
 
-// ---------- Signals ----------
+// ---------- Signals (simulated trade log) ----------
 app.get(
   '/signals',
   wrap(async (_req, res) => {
@@ -157,6 +158,49 @@ app.post(
       return
     }
     res.json({ ok: true })
+  }),
+)
+
+// ---------- Arc anchors ----------
+app.get(
+  '/anchors',
+  wrap(async (_req, res) => {
+    const rows = await prisma.tradeSignal.findMany({
+      where: { blockchainTxHash: { not: null } },
+      orderBy: { publishedAt: 'asc' },
+    })
+    res.json({
+      registryAddress: config.registryAddress,
+      anchors: rows.map((r) => ({ signalId: r.id, txHash: r.blockchainTxHash as string })),
+    })
+  }),
+)
+
+app.post(
+  '/signals/:id/anchor',
+  requireAuth,
+  requireTrader,
+  wrap(async (req, res) => {
+    const txHash = String(req.body?.txHash ?? '')
+    const signal = await prisma.tradeSignal.findUnique({ where: { id: String(req.params.id) } })
+    if (!signal) {
+      res.status(404).json({ error: 'Trade not found.' })
+      return
+    }
+    if (signal.blockchainTxHash) {
+      res.json({ ok: true, txHash: signal.blockchainTxHash })
+      return
+    }
+    const result = await verifyAnchor(txHash, signal.signalHash)
+    if (!result.ok) {
+      res.status(400).json({ error: result.reason })
+      return
+    }
+    await prisma.tradeSignal.updateMany({
+      where: { id: signal.id, blockchainTxHash: null },
+      data: { blockchainTxHash: txHash },
+    })
+    res.json({ ok: true, txHash })
   }),
 )
 
